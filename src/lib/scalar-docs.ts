@@ -8,6 +8,17 @@ import { auth } from "@/middleware/auth";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Context } from "hono";
 
+// ─── Client Error ────────────────────────────────────────────────────────────
+
+class ClientError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+    this.name = "ClientError";
+  }
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type InferOutput<S> = S extends StandardSchemaV1<any, infer O> ? O : never;
@@ -196,6 +207,11 @@ class PaginationBuilder<TQB extends { findMany: (opts: any) => any } = any> {
     const sortField = query.sort;
     const sortOrder = query.order ?? "desc";
     const sortDir = sortOrder === "asc" ? asc : desc;
+
+    if (sortField && !this._sortable[sortField]) {
+      const allowed = Object.keys(this._sortable).join(", ");
+      throw new ClientError(`Invalid sort field '${sortField}'. Allowed: ${allowed}`);
+    }
 
     const conditions: (SQL | undefined)[] = [];
     if (this._where) conditions.push(this._where);
@@ -463,6 +479,12 @@ export const define = {
     }
 
     const spec = generateSpec([...registry], opts);
+
+    app.onError((err, c) => {
+      if (err instanceof ClientError) return c.json({ error: err.message }, err.status as 400);
+      console.error(err);
+      return c.json({ error: "Internal server error" }, 500);
+    });
 
     app.get(specEndpoint, (c) => c.json(spec));
     app.get(docsEndpoint, apiReference({ spec: { url: specEndpoint } }) as never);
