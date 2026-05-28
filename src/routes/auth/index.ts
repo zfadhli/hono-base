@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/index";
 import { users } from "@/db/schema";
 import { define } from "@/lib/scalar-docs";
-import { signJwt } from "@/lib/jwt";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "@/lib/jwt";
 import { getGoogleAuthUrl, exchangeCodeForTokens, getUserProfile } from "@/lib/oauth";
+import { getCookie, setCookie } from "hono/cookie";
 import { CodeParam } from "./schema.js";
 
 const r = define.in("/api/auth");
@@ -23,7 +24,7 @@ r.get("/google/url", "Get Google OAuth URL")
 r.get("/google/callback", "Handle Google OAuth callback")
   .query(CodeParam)
   .tag("Auth")
-  .response(200, "JWT token and user profile")
+  .response(200, "Access token and user profile")
   .response(400, "Missing code or token exchange failed")
   .response(500, "Failed to create user")
   .handle(async (c, { query }) => {
@@ -59,12 +60,70 @@ r.get("/google/callback", "Handle Google OAuth callback")
       user = created;
     }
 
-    const token = await signJwt({ sub: user.id, email: user.email, name: user.name });
+    const accessToken = await signAccessToken({ sub: user.id, email: user.email, name: user.name });
+    const refreshToken = await signRefreshToken({ sub: user.id });
+
+    setCookie(c, "refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: 7 * 24 * 60 * 60,
+    });
 
     return c.json({
-      token,
+      accessToken,
       user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
     });
+  });
+
+r.post("/refresh", "Refresh access token")
+  .tag("Auth")
+  .response(200, "New access token")
+  .response(401, "Invalid or expired refresh token")
+  .handle(async (c) => {
+    const refreshToken = getCookie(c, "refreshToken");
+    if (!refreshToken) return c.json({ error: "No refresh token" }, 401);
+
+    let payload: { sub: number };
+    try {
+      payload = await verifyRefreshToken(refreshToken);
+    } catch {
+      return c.json({ error: "Invalid or expired refresh token" }, 401);
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, payload.sub));
+    if (!user) return c.json({ error: "User not found" }, 401);
+
+    const accessToken = await signAccessToken({ sub: user.id, email: user.email, name: user.name });
+    const newRefreshToken = await signRefreshToken({ sub: user.id });
+
+    setCookie(c, "refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return c.json({
+      accessToken,
+      user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
+    });
+  });
+
+r.post("/logout", "Log out and clear refresh token")
+  .tag("Auth")
+  .response(200, "Logged out")
+  .handle(async (c) => {
+    setCookie(c, "refreshToken", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: 0,
+    });
+    return c.json({ success: true });
   });
 
 r.get("/me", "Get current user profile")
