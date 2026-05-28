@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { define } from "@/lib/scalar-docs";
+import { rateLimit } from "@/middleware/rate-limit";
 import "@/routes/post/index";
 import "@/routes/tags/index";
 import "@/routes/post/[postId]/comments/index";
@@ -12,6 +13,9 @@ const app = new Hono();
 
 app.use("*", logger());
 app.use("/api/*", cors());
+app.use("/api/auth/*", rateLimit({ window: 60, max: 5 }));
+app.use("/api/posts*", rateLimit({ window: 60, max: 20 }));
+app.use("/api/*", rateLimit({ window: 60, max: 60 }));
 
 define.mount(app, {
   title: "Hono Blog API",
