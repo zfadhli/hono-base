@@ -33,8 +33,7 @@ r.post("", "Toggle like on a post")
   .tag("Likes")
   .response(200, "Toggled like status")
   .response(401, "Unauthorized")
-  .handle(async (c, { param }) => {
-    const user = (c.get as (k: string) => { id: number })("user");
+  .handle(async (c, { param, user }) => {
     const { postId } = param;
 
     const [existing] = await db

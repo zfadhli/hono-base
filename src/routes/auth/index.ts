@@ -72,7 +72,6 @@ r.get("/me", "Get current user profile")
   .tag("Auth")
   .response(200, "User profile")
   .response(401, "Unauthorized")
-  .handle(async (c) => {
-    const user = (c.get as (k: string) => { id: number; name: string; email: string; avatar: string | null })("user");
+  .handle(async (c, { user }) => {
     return c.json({ user });
   });

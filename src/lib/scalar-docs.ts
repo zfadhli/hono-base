@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { sValidator as stdValidator } from "@hono/standard-validator";
 import { apiReference } from "@scalar/hono-api-reference";
-import { eq } from "drizzle-orm";
+import { eq, and, count, asc, desc } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { db } from "@/db/index";
 import { auth } from "@/middleware/auth";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
@@ -10,6 +11,8 @@ import type { Context } from "hono";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type InferOutput<S> = S extends StandardSchemaV1<any, infer O> ? O : never;
+
+type AuthUser = { id: number; name: string; email: string; avatar: string | null };
 
 interface RouteDef {
   method: string;
@@ -37,6 +40,8 @@ interface MountOptions {
 class RouteBuilder<T extends Record<string, unknown> = {}> {
   private def: Partial<RouteDef> = {};
   private pre: unknown[] = [];
+  private hasAuth = false;
+  private existsVars: string[] = [];
 
   constructor(method: string, path: string, description?: string) {
     this.def.method = method;
@@ -68,7 +73,7 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this;
   }
 
-  exists(paramName: string, table: any, options?: { key?: string }): this {
+  exists(paramName: string, table: any, options?: { key?: string }): RouteBuilder<T & Record<string, any>> {
     const key = options?.key ?? "id";
     const varName = paramName.replace(/Id$/, "");
 
@@ -82,13 +87,15 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
       await next();
     });
 
-    return this;
+    this.existsVars.push(varName);
+    return this as unknown as RouteBuilder<T & Record<string, any>>;
   }
 
-  auth(): this {
+  auth(): RouteBuilder<T & { user: AuthUser }> {
     this.def.requiresAuth = true;
+    this.hasAuth = true;
     this.pre.push(auth);
-    return this;
+    return this as unknown as RouteBuilder<T & { user: AuthUser }>;
   }
 
   response(status: number, description: string): this {
@@ -101,12 +108,73 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this;
   }
 
+  paginate(config: {
+    qb: any;
+    table: any;
+    defaults?: { offset?: string; limit?: string; sort?: string; order?: string };
+    filters?: Record<string, (val: string) => SQL | undefined>;
+    where?: SQL | ((c: Context) => SQL | undefined);
+    sortable?: Record<string, any>;
+    with?: Record<string, any>;
+    shape?: (row: any) => Record<string, unknown>;
+  }): void {
+    this.handle(async (c, data) => {
+      const query: Record<string, string | undefined> = (data as any).query ?? {};
+
+      const offset = Number(query.offset ?? config.defaults?.offset ?? 0);
+      const limit = Number(query.limit ?? config.defaults?.limit ?? 20);
+      const sortField = query.sort ?? config.defaults?.sort;
+      const sortOrder = query.order ?? config.defaults?.order ?? "desc";
+      const sortDir = sortOrder === "asc" ? asc : desc;
+
+      const conditions: (SQL | undefined)[] = [];
+
+      if (config.where) {
+        const w = typeof config.where === "function" ? config.where(c) : config.where;
+        if (w) conditions.push(w);
+      }
+
+      if (config.filters) {
+        for (const [key, fn] of Object.entries(config.filters)) {
+          const val = query[key];
+          if (val !== undefined) {
+            conditions.push(fn(val));
+          }
+        }
+      }
+
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+      let orderBy: any;
+      if (sortField && config.sortable?.[sortField]) {
+        orderBy = [sortDir(config.sortable[sortField])];
+      }
+
+      const rows = await config.qb.findMany({
+        where,
+        limit,
+        offset,
+        orderBy,
+        with: config.with,
+      });
+
+      const [totalRow] = await db.select({ total: count() }).from(config.table).where(where);
+      const total = totalRow!.total;
+
+      const result = config.shape ? rows.map(config.shape) : rows;
+
+      return c.json({ data: result, total, offset, limit });
+    });
+  }
+
   handle(handler: (c: Context, data: T) => Response | Promise<Response>): void {
     this.def.handler = async (c: Context) => {
       const data: Record<string, unknown> = {};
       if (this.def.param) data.param = (c.req.valid as (t: string) => unknown)("param");
       if (this.def.query) data.query = (c.req.valid as (t: string) => unknown)("query");
       if (this.def.json) data.json = (c.req.valid as (t: string) => unknown)("json");
+      if (this.hasAuth) data.user = c.get("user");
+      for (const name of this.existsVars) data[name] = c.get(name);
       return handler(c, data as T);
     };
 

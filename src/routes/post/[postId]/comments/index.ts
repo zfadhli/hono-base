@@ -30,8 +30,7 @@ r.post("", "Create a comment on a post")
   .tag("Comments")
   .response(201, "Created comment")
   .response(401, "Unauthorized")
-  .handle(async (c, { param, json }) => {
-    const user = (c.get as (k: string) => { id: number; name: string; email: string })("user");
+  .handle(async (c, { param, json, user }) => {
     const { postId } = param;
 
     const [comment] = await db.insert(comments).values({
@@ -51,8 +50,7 @@ r.delete("/:id", "Delete a comment")
   .response(200, "Deleted comment")
   .response(401, "Unauthorized")
   .response(404, "Comment not found")
-  .handle(async (c) => {
-    const user = (c.get as (k: string) => { id: number })("user");
+  .handle(async (c, { user }) => {
     const id = Number(c.req.param("id")!);
     const [existing] = await db.select({ id: comments.id, userId: comments.userId }).from(comments).where(eq(comments.id, id));
     if (!existing) return c.json({ error: "Not found" }, 404);

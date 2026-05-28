@@ -32,8 +32,7 @@ r.delete("/:id", "Delete a tag")
   .tag("Tags")
   .response(200, "Deleted tag")
   .response(401, "Unauthorized")
-  .handle(async (c) => {
-    const id = (c.get as (k: string) => { id: number })("id").id;
-    await db.delete(tags).where(eq(tags.id, id));
+  .handle(async (c, { id }) => {
+    await db.delete(tags).where(eq(tags.id, id.id));
     return c.json({ success: true });
   });

@@ -20,8 +20,14 @@ export const UpdatePost = type({
 });
 export type UpdatePost = typeof UpdatePost.infer;
 
-export const Pagination = type({
+export const PostQuery = type({
   "offset?": "string",
   "limit?": "string",
+  "q?": "string",
+  "tag?": "string",
+  "authorId?": "string",
+  "published?": "string",
+  "sort?": "'createdAt' | 'title'",
+  "order?": "'asc' | 'desc'",
 });
-export type Pagination = typeof Pagination.infer;
+export type PostQuery = typeof PostQuery.infer;

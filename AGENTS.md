@@ -72,6 +72,7 @@ If a check fails, the agent must:
 
 ## 5. Commit Strategy
 
+- **Always commit after every edit or change** — no uncommitted work at the end of any task.
 - Make **small, atomic commits** — one logical change per commit.
 - Group related changes together; avoid "and also" commits.
 - Each commit should build on the previous one and keep the project in a working state.
