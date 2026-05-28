@@ -1,25 +1,27 @@
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "@/db/index";
 import { comments, posts } from "@/db/schema";
-import { define } from "@/lib/scalar-docs";
+import { define, pagination } from "@/lib/scalar-docs";
 import { PostIdParam } from "@/validators/common";
-import { CreateComment } from "./schema.js";
+import { CreateComment, CommentQuery } from "./schema.js";
 
 const r = define.in("/api/posts/:postId/comments");
 
-r.get("", "List comments for a post")
+r.get("", "List paginated comments for a post")
   .param(PostIdParam)
   .exists("postId", posts)
+  .query(CommentQuery)
   .tag("Comments")
-  .response(200, "List of comments")
-  .handle(async (c, { param }) => {
-    const { postId } = param;
-    const rows = await db.query.comments.findMany({
-      where: eq(comments.postId, postId),
-      orderBy: [desc(comments.createdAt)],
-    });
-    const [totalRow] = await db.select({ total: count() }).from(comments).where(eq(comments.postId, postId));
-    return c.json({ data: rows, total: totalRow!.total });
+  .response(200, "Paginated list of comments")
+  .handle(async (c, { query }) => {
+    const postId = Number(c.req.param("postId")!);
+    const result = await pagination(query)
+      .from(db.query.comments, comments)
+      .where(eq(comments.postId, postId))
+      .orderBy([desc(comments.createdAt)])
+      .execute();
+
+    return c.json(result);
   });
 
 r.post("", "Create a comment on a post")

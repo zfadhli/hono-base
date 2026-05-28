@@ -1,17 +1,22 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/index";
 import { tags } from "@/db/schema";
-import { define } from "@/lib/scalar-docs";
-import { CreateTag } from "./schema.js";
+import { define, pagination } from "@/lib/scalar-docs";
+import { CreateTag, TagQuery } from "./schema.js";
 
 const r = define.in("/api/tags");
 
-r.get("", "List all tags")
+r.get("", "List paginated tags")
+  .query(TagQuery)
   .tag("Tags")
-  .response(200, "List of tags")
-  .handle(async (c) => {
-    const all = await db.query.tags.findMany({ orderBy: tags.name });
-    return c.json({ data: all });
+  .response(200, "Paginated list of tags")
+  .handle(async (c, { query }) => {
+    const result = await pagination(query)
+      .from(db.query.tags, tags)
+      .sortable({ name: tags.name })
+      .execute();
+
+    return c.json(result);
   });
 
 r.post("", "Create a new tag")

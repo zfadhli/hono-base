@@ -5,3 +5,11 @@ export const CreateTag = type({
   slug: "string",
 });
 export type CreateTag = typeof CreateTag.infer;
+
+export const TagQuery = type({
+  "offset?": "string",
+  "limit?": "string",
+  "sort?": "'name'",
+  "order?": "'asc' | 'desc'",
+});
+export type TagQuery = typeof TagQuery.infer;
