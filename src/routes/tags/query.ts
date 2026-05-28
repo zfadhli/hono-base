@@ -5,6 +5,7 @@ export const tagsQueryBuilder = queryBuilder()
   .allowedSorts({
     name: tags.name,
   })
+  .defaultSort("name")
   .allowedFields({
     id: true,
     name: true,

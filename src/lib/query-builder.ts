@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { and, count, asc, desc } from "drizzle-orm";
+import { and, or, count, asc, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "@/db/index";
 import { ClientError } from "@/lib/errors";
@@ -13,6 +13,8 @@ export class AllowedQueryBuilder {
   private _sorts: SortMap = {};
   private _includes: IncludeMap = {};
   private _fields: Record<string, boolean> = {};
+  private _appends: Record<string, (row: any) => any | Promise<any>> = {};
+  private _defaultSort?: string;
   private _transform?: (row: any) => any;
 
   allowedFilters(f: FilterMap): this {
@@ -35,6 +37,42 @@ export class AllowedQueryBuilder {
     return this;
   }
 
+  allowedAppends(a: Record<string, (row: any) => any | Promise<any>>): this {
+    Object.assign(this._appends, a);
+    return this;
+  }
+
+  defaultSort(sort: string): this {
+    const key = sort.replace(/^[+-]/, "");
+    if (!this._sorts[key]) {
+      throw new Error(`Default sort '${key}' is not an allowed sort. Allowed: ${Object.keys(this._sorts).join(", ")}`);
+    }
+    this._defaultSort = sort;
+    return this;
+  }
+
+  groupOr(key: string, targets: string[]): this {
+    this._filters[key] = (v: string) => {
+      const conditions = targets
+        .map((t) => this._filters[t])
+        .filter((fn): fn is (v: string) => SQL | undefined => fn !== undefined)
+        .map((fn) => fn(v));
+      return or(...conditions);
+    };
+    return this;
+  }
+
+  groupAnd(key: string, targets: string[]): this {
+    this._filters[key] = (v: string) => {
+      const conditions = targets
+        .map((t) => this._filters[t])
+        .filter((fn): fn is (v: string) => SQL | undefined => fn !== undefined)
+        .map((fn) => fn(v));
+      return and(...conditions);
+    };
+    return this;
+  }
+
   transform(fn: (row: any) => any): this {
     this._transform = fn;
     return this;
@@ -47,6 +85,7 @@ export class AllowedQueryBuilder {
       "order?": "'asc' | 'desc'",
       "include?": "string",
       "fields?": "string",
+      "append?": "string",
     };
 
     const sortKeys = Object.keys(this._sorts);
@@ -69,8 +108,10 @@ export class AllowedQueryBuilder {
   ) {
     const offset = Number(query.offset ?? 0);
     const limit = Number(query.limit ?? 20);
-    const sortField = query.sort;
-    const sortOrder = query.order ?? "desc";
+    const isDefaultSort = query.sort === undefined && this._defaultSort !== undefined;
+    const sortField = isDefaultSort ? this._defaultSort!.replace(/^[+-]/, "") : (query.sort ?? undefined);
+    const sortDefaultDir = isDefaultSort && this._defaultSort!.startsWith("-") ? "desc" : "asc";
+    const sortOrder = query.order ?? sortDefaultDir;
     const sortDir = sortOrder === "asc" ? asc : desc;
 
     if (sortField && !this._sorts[sortField]) {
@@ -116,6 +157,21 @@ export class AllowedQueryBuilder {
 
     if (this._transform) {
       data = data.map(this._transform);
+    }
+
+    const appendParam = query.append;
+    if (appendParam && Object.keys(this._appends).length > 0) {
+      const requested = appendParam.split(",").map((s) => s.trim());
+      data = await Promise.all(
+        data.map(async (row: any) => {
+          for (const key of requested) {
+            if (this._appends[key]) {
+              row = { ...row, [key]: await this._appends[key](row) };
+            }
+          }
+          return row;
+        }),
+      );
     }
 
     const fieldsParam = query.fields;

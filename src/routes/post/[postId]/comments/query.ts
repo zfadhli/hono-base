@@ -5,6 +5,7 @@ export const commentsQueryBuilder = queryBuilder()
   .allowedSorts({
     createdAt: comments.createdAt,
   })
+  .defaultSort("-createdAt")
   .allowedFields({
     id: true,
     postId: true,

@@ -1,4 +1,4 @@
-import { sql, like, or, exists, and, eq } from "drizzle-orm";
+import { sql, like, exists, and, eq } from "drizzle-orm";
 import { db } from "@/db/index";
 import { posts, postsTags, tags } from "@/db/schema";
 import { queryBuilder } from "@/lib/query-builder";
@@ -23,7 +23,8 @@ export { formatPost };
 
 export const postQueryBuilder = queryBuilder()
   .allowedFilters({
-    q: (v) => or(like(posts.title, `%${v}%`), like(posts.content, `%${v}%`)),
+    title: (v) => like(posts.title, `%${v}%`),
+    content: (v) => like(posts.content, `%${v}%`),
     tag: (v) => exists(
       db.select({ one: sql`1` })
         .from(postsTags)
@@ -36,6 +37,7 @@ export const postQueryBuilder = queryBuilder()
     authorId: (v) => eq(posts.authorId, Number(v)),
     published: (v) => eq(posts.published, v === "true"),
   })
+  .groupOr('q', ['title', 'content'])
   .allowedSorts({
     createdAt: posts.createdAt,
     title: posts.title,
@@ -57,4 +59,5 @@ export const postQueryBuilder = queryBuilder()
     tags: true,
     likeCount: true,
   })
+  .defaultSort("-createdAt")
   .transform(formatPost);
