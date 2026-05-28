@@ -73,8 +73,9 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this;
   }
 
-  exists(paramName: string, table: any, options?: { key?: string }): RouteBuilder<T & Record<string, any>> {
+  exists(paramName: string, table: any, options?: { key?: string; owner?: string }): RouteBuilder<T & Record<string, any>> {
     const key = options?.key ?? "id";
+    const ownerColumn = options?.owner;
     const varName = paramName.replace(/Id$/, "");
 
     this.pre.push(async (c: Context, next: () => Promise<void>) => {
@@ -83,6 +84,11 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
       if (!Number.isFinite(val)) return c.json({ error: `Invalid ${paramName}` }, 400);
       const [row] = await db.select().from(table).where(eq(table[key], val));
       if (!row) return c.json({ error: `${varName.charAt(0).toUpperCase() + varName.slice(1)} not found` }, 404);
+      if (ownerColumn) {
+        const user = c.get("user") as { id: number } | undefined;
+        if (!user) return c.json({ error: "Unauthorized" }, 401);
+        if ((row as any)[ownerColumn] !== user.id) return c.json({ error: "Forbidden" }, 403);
+      }
       c.set(varName, row);
       await next();
     });
@@ -108,65 +114,6 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this;
   }
 
-  paginate(config: {
-    qb: any;
-    table: any;
-    defaults?: { offset?: string; limit?: string; sort?: string; order?: string };
-    filters?: Record<string, (val: string) => SQL | undefined>;
-    where?: SQL | ((c: Context) => SQL | undefined);
-    sortable?: Record<string, any>;
-    with?: Record<string, any>;
-    shape?: (row: any) => Record<string, unknown>;
-  }): void {
-    this.handle(async (c, data) => {
-      const query: Record<string, string | undefined> = (data as any).query ?? {};
-
-      const offset = Number(query.offset ?? config.defaults?.offset ?? 0);
-      const limit = Number(query.limit ?? config.defaults?.limit ?? 20);
-      const sortField = query.sort ?? config.defaults?.sort;
-      const sortOrder = query.order ?? config.defaults?.order ?? "desc";
-      const sortDir = sortOrder === "asc" ? asc : desc;
-
-      const conditions: (SQL | undefined)[] = [];
-
-      if (config.where) {
-        const w = typeof config.where === "function" ? config.where(c) : config.where;
-        if (w) conditions.push(w);
-      }
-
-      if (config.filters) {
-        for (const [key, fn] of Object.entries(config.filters)) {
-          const val = query[key];
-          if (val !== undefined) {
-            conditions.push(fn(val));
-          }
-        }
-      }
-
-      const where = conditions.length > 0 ? and(...conditions) : undefined;
-
-      let orderBy: any;
-      if (sortField && config.sortable?.[sortField]) {
-        orderBy = [sortDir(config.sortable[sortField])];
-      }
-
-      const rows = await config.qb.findMany({
-        where,
-        limit,
-        offset,
-        orderBy,
-        with: config.with,
-      });
-
-      const [totalRow] = await db.select({ total: count() }).from(config.table).where(where);
-      const total = totalRow!.total;
-
-      const result = config.shape ? rows.map(config.shape) : rows;
-
-      return c.json({ data: result, total, offset, limit });
-    });
-  }
-
   handle(handler: (c: Context, data: T) => Response | Promise<Response>): void {
     this.def.handler = async (c: Context) => {
       const data: Record<string, unknown> = {};
@@ -187,6 +134,95 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
 
     registry.push(this.def as RouteDef);
   }
+}
+
+// ─── Pagination Builder ─────────────────────────────────────────────────────
+
+class PaginationBuilder<TQB extends { findMany: (opts: any) => any } = any> {
+  private _qb?: TQB;
+  private _table?: any;
+  private _filters: Record<string, (val: string) => SQL | undefined> = {};
+  private _sortable: Record<string, any> = {};
+  private _with: any;
+  private _orderBy: any;
+  private _where: SQL | undefined;
+
+  constructor(private query: Record<string, string | undefined>) {}
+
+  from<Q extends { findMany: (opts: any) => any }>(qb: Q, table: any): PaginationBuilder<Q> {
+    this._qb = qb as any;
+    this._table = table;
+    return this as unknown as PaginationBuilder<Q>;
+  }
+
+  filters(f: Record<string, (val: string) => SQL | undefined>): this {
+    Object.assign(this._filters, f);
+    return this;
+  }
+
+  sortable(s: Record<string, any>): this {
+    Object.assign(this._sortable, s);
+    return this;
+  }
+
+  with(
+    w: NonNullable<Parameters<TQB["findMany"]>[0]> extends { with?: infer W } ? W : never
+  ): this {
+    this._with = w;
+    return this;
+  }
+
+  orderBy(o: any): this {
+    this._orderBy = o;
+    return this;
+  }
+
+  where(w: SQL | undefined): this {
+    this._where = w;
+    return this;
+  }
+
+  async execute(): Promise<{
+    data: any[];
+    total: number;
+    offset: number;
+    limit: number;
+  }> {
+    if (!this._qb || !this._table) throw new Error("Call .from() first");
+
+    const query = this.query;
+    const offset = Number(query.offset ?? 0);
+    const limit = Number(query.limit ?? 20);
+    const sortField = query.sort;
+    const sortOrder = query.order ?? "desc";
+    const sortDir = sortOrder === "asc" ? asc : desc;
+
+    const conditions: (SQL | undefined)[] = [];
+    if (this._where) conditions.push(this._where);
+
+    for (const [key, fn] of Object.entries(this._filters)) {
+      const val = query[key];
+      if (val !== undefined) conditions.push(fn(val));
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    let orderBy = this._orderBy;
+    if (!orderBy && sortField && this._sortable[sortField]) {
+      orderBy = [sortDir(this._sortable[sortField])];
+    }
+
+    const rows = await this._qb.findMany({ where, limit, offset, orderBy, with: this._with });
+
+    const [totalRow] = await db.select({ total: count() }).from(this._table).where(where);
+    const total = totalRow!.total;
+
+    return { data: rows, total, offset, limit };
+  }
+}
+
+export function pagination(query: Record<string, string | undefined>) {
+  return new PaginationBuilder(query);
 }
 
 // ─── Global Registry ────────────────────────────────────────────────────────

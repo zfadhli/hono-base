@@ -46,15 +46,13 @@ r.post("", "Create a comment on a post")
 
 r.delete("/:id", "Delete a comment")
   .auth()
+  .exists("id", comments, { owner: "userId" })
   .tag("Comments")
   .response(200, "Deleted comment")
   .response(401, "Unauthorized")
+  .response(403, "Forbidden")
   .response(404, "Comment not found")
-  .handle(async (c, { user }) => {
-    const id = Number(c.req.param("id")!);
-    const [existing] = await db.select({ id: comments.id, userId: comments.userId }).from(comments).where(eq(comments.id, id));
-    if (!existing) return c.json({ error: "Not found" }, 404);
-    if (existing.userId !== user.id) return c.json({ error: "Forbidden" }, 403);
-    await db.delete(comments).where(eq(comments.id, id));
+  .handle(async (c, { id }) => {
+    await db.delete(comments).where(eq(comments.id, id.id));
     return c.json({ success: true });
   });

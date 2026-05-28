@@ -1,8 +1,24 @@
 import { eq, sql, like, or } from "drizzle-orm";
 import { db } from "@/db/index";
 import { posts, postsTags, tags } from "@/db/schema";
-import { define } from "@/lib/scalar-docs";
+import { define, pagination } from "@/lib/scalar-docs";
 import { CreatePost, UpdatePost, PostQuery } from "./schema.js";
+
+function formatPost(row: any) {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    content: row.content,
+    excerpt: row.excerpt,
+    published: row.published,
+    authorId: row.authorId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    tags: row.postsTags.map((pt: any) => pt.tag),
+    likeCount: row.postLikes.length,
+  };
+}
 
 const r = define.in("/api/posts");
 
@@ -10,31 +26,20 @@ r.get("", "List paginated posts")
   .query(PostQuery)
   .tag("Posts")
   .response(200, "Paginated list of posts")
-  .paginate({
-    qb: db.query.posts,
-    table: posts,
-    defaults: { offset: "0", limit: "20", sort: "createdAt", order: "desc" },
-    filters: {
-      q: (v) => or(like(posts.title, `%${v}%`), like(posts.content, `%${v}%`)),
-      tag: (v) => sql`exists (select 1 from ${postsTags} pt join ${tags} t on pt.tag_id = t.id where pt.post_id = ${posts.id} and t.slug = ${v})`,
-      authorId: (v) => eq(posts.authorId, Number(v)),
-      published: (v) => eq(posts.published, v === "true"),
-    },
-    sortable: { createdAt: posts.createdAt, title: posts.title },
-    with: { postsTags: { with: { tag: true } }, postLikes: true },
-    shape: (row) => ({
-      id: row.id,
-      title: row.title,
-      slug: row.slug,
-      content: row.content,
-      excerpt: row.excerpt,
-      published: row.published,
-      authorId: row.authorId,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      tags: row.postsTags.map((pt: any) => pt.tag),
-      likeCount: row.postLikes.length,
-    }),
+  .handle(async (c, { query }) => {
+    const result = await pagination(query)
+      .from(db.query.posts, posts)
+      .filters({
+        q: (v) => or(like(posts.title, `%${v}%`), like(posts.content, `%${v}%`)),
+        tag: (v) => sql`exists (select 1 from ${postsTags} pt join ${tags} t on pt.tag_id = t.id where pt.post_id = ${posts.id} and t.slug = ${v})`,
+        authorId: (v) => eq(posts.authorId, Number(v)),
+        published: (v) => eq(posts.published, v === "true"),
+      })
+      .sortable({ createdAt: posts.createdAt, title: posts.title })
+      .with({ postsTags: { with: { tag: true } }, postLikes: true })
+      .execute();
+
+    return c.json({ data: result.data.map(formatPost), total: result.total, offset: result.offset, limit: result.limit });
   });
 
 r.get("/:slug", "Get a single post by slug")
@@ -51,21 +56,7 @@ r.get("/:slug", "Get a single post by slug")
 
     if (!row) return c.json({ error: "Not found" }, 404);
 
-    return c.json({
-      data: {
-        id: row.id,
-        title: row.title,
-        slug: row.slug,
-        content: row.content,
-        excerpt: row.excerpt,
-        published: row.published,
-        authorId: row.authorId,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        tags: row.postsTags.map((pt) => pt.tag),
-        likeCount: row.postLikes.length,
-      },
-    });
+    return c.json({ data: formatPost(row) });
   });
 
 r.post("", "Create a new post")
@@ -93,15 +84,14 @@ r.post("", "Create a new post")
 
 r.patch("/:id", "Update an existing post")
   .auth()
-  .exists("id", posts)
+  .exists("id", posts, { owner: "authorId" })
   .json(UpdatePost)
   .tag("Posts")
   .response(200, "Updated post")
   .response(401, "Unauthorized")
   .response(403, "Forbidden")
   .response(404, "Post not found")
-  .handle(async (c, { json, id, user }) => {
-    if (id.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
+  .handle(async (c, { json, id }) => {
     const { tagIds, ...postFields } = json;
 
     if (Object.keys(postFields).length > 0) {
@@ -129,35 +119,18 @@ r.patch("/:id", "Update an existing post")
       with: { postsTags: { with: { tag: true } }, postLikes: true },
     });
 
-    return c.json({
-      data: updated
-        ? {
-            id: updated.id,
-            title: updated.title,
-            slug: updated.slug,
-            content: updated.content,
-            excerpt: updated.excerpt,
-            published: updated.published,
-            authorId: updated.authorId,
-            createdAt: updated.createdAt,
-            updatedAt: updated.updatedAt,
-            tags: updated.postsTags.map((pt) => pt.tag),
-            likeCount: updated.postLikes.length,
-          }
-        : updated,
-    });
+    return c.json({ data: updated ? formatPost(updated) : updated });
   });
 
 r.delete("/:id", "Delete a post")
   .auth()
-  .exists("id", posts)
+  .exists("id", posts, { owner: "authorId" })
   .tag("Posts")
   .response(200, "Deleted post")
   .response(401, "Unauthorized")
   .response(403, "Forbidden")
   .response(404, "Post not found")
-  .handle(async (c, { id, user }) => {
-    if (id.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
+  .handle(async (c, { id }) => {
     await db.delete(posts).where(eq(posts.id, id.id));
     return c.json({ success: true });
   });
