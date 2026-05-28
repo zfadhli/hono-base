@@ -1,10 +1,12 @@
 import { eq, and, count } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { postLikes, posts, users } from "../db/schema.js";
-import { define } from "../lib/scalar-docs.js";
-import { PostIdParam } from "../validators/schemas.js";
+import { db } from "@/db/index";
+import { postLikes, posts, users } from "@/db/schema";
+import { define } from "@/lib/scalar-docs";
+import { PostIdParam } from "@/validators/common";
 
-define.get("/api/posts/:postId/likes", "Get likes for a post")
+const r = define.in("/api/posts/:postId/likes");
+
+r.get("", "Get likes for a post")
   .param(PostIdParam)
   .exists("postId", posts)
   .tag("Likes")
@@ -24,7 +26,7 @@ define.get("/api/posts/:postId/likes", "Get likes for a post")
     return c.json({ count: total, users: rows });
   });
 
-define.post("/api/posts/:postId/likes", "Toggle like on a post")
+r.post("", "Toggle like on a post")
   .auth()
   .param(PostIdParam)
   .exists("postId", posts)

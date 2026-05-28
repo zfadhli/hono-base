@@ -1,7 +1,7 @@
 import type { Context } from "hono";
-import { verifyJwt } from "../lib/jwt.js";
-import { db } from "../db/index.js";
-import { users } from "../db/schema.js";
+import { verifyJwt } from "@/lib/jwt";
+import { db } from "@/db/index";
+import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function auth(c: Context, next: () => Promise<void>) {

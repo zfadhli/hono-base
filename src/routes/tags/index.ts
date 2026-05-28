@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { tags } from "../db/schema.js";
-import { define } from "../lib/scalar-docs.js";
-import { CreateTag } from "../validators/schemas.js";
+import { db } from "@/db/index";
+import { tags } from "@/db/schema";
+import { define } from "@/lib/scalar-docs";
+import { CreateTag } from "./schema.js";
 
-define.get("/api/tags", "List all tags")
+const r = define.in("/api/tags");
+
+r.get("", "List all tags")
   .tag("Tags")
   .response(200, "List of tags")
   .handle(async (c) => {
@@ -12,7 +14,7 @@ define.get("/api/tags", "List all tags")
     return c.json({ data: all });
   });
 
-define.post("/api/tags", "Create a new tag")
+r.post("", "Create a new tag")
   .auth()
   .json(CreateTag)
   .tag("Tags")
@@ -24,7 +26,7 @@ define.post("/api/tags", "Create a new tag")
     return c.json({ data: tag }, 201);
   });
 
-define.delete("/api/tags/:id", "Delete a tag")
+r.delete("/:id", "Delete a tag")
   .auth()
   .exists("id", tags)
   .tag("Tags")

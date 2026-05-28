@@ -1,10 +1,13 @@
 import { eq, desc, count } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { comments, posts } from "../db/schema.js";
-import { define } from "../lib/scalar-docs.js";
-import { CreateComment, PostIdParam } from "../validators/schemas.js";
+import { db } from "@/db/index";
+import { comments, posts } from "@/db/schema";
+import { define } from "@/lib/scalar-docs";
+import { PostIdParam } from "@/validators/common";
+import { CreateComment } from "./schema.js";
 
-define.get("/api/posts/:postId/comments", "List comments for a post")
+const r = define.in("/api/posts/:postId/comments");
+
+r.get("", "List comments for a post")
   .param(PostIdParam)
   .exists("postId", posts)
   .tag("Comments")
@@ -19,7 +22,7 @@ define.get("/api/posts/:postId/comments", "List comments for a post")
     return c.json({ data: rows, total: totalRow!.total });
   });
 
-define.post("/api/posts/:postId/comments", "Create a comment on a post")
+r.post("", "Create a comment on a post")
   .auth()
   .param(PostIdParam)
   .exists("postId", posts)
@@ -42,7 +45,7 @@ define.post("/api/posts/:postId/comments", "Create a comment on a post")
     return c.json({ data: comment }, 201);
   });
 
-define.delete("/api/posts/:postId/comments/:id", "Delete a comment")
+r.delete("/:id", "Delete a comment")
   .auth()
   .tag("Comments")
   .response(200, "Deleted comment")

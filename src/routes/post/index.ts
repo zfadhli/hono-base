@@ -1,10 +1,12 @@
 import { eq, desc, sql, count } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { posts, postsTags, tags } from "../db/schema.js";
-import { define } from "../lib/scalar-docs.js";
-import { CreatePost, UpdatePost, Pagination } from "../validators/schemas.js";
+import { db } from "@/db/index";
+import { posts, postsTags, tags } from "@/db/schema";
+import { define } from "@/lib/scalar-docs";
+import { CreatePost, UpdatePost, Pagination } from "./schema.js";
 
-define.get("/api/posts", "List paginated posts")
+const r = define.in("/api/posts");
+
+r.get("", "List paginated posts")
   .query(Pagination)
   .tag("Posts")
   .response(200, "Paginated list of posts")
@@ -39,7 +41,7 @@ define.get("/api/posts", "List paginated posts")
     return c.json({ data, total, offset, limit });
   });
 
-define.get("/api/posts/:slug", "Get a single post by slug")
+r.get("/:slug", "Get a single post by slug")
   .tag("Posts")
   .response(200, "A single post with tags")
   .response(404, "Post not found")
@@ -70,7 +72,7 @@ define.get("/api/posts/:slug", "Get a single post by slug")
     });
   });
 
-define.post("/api/posts", "Create a new post")
+r.post("", "Create a new post")
   .auth()
   .json(CreatePost)
   .tag("Posts")
@@ -94,7 +96,7 @@ define.post("/api/posts", "Create a new post")
     return c.json({ data: post }, 201);
   });
 
-define.patch("/api/posts/:id", "Update an existing post")
+r.patch("/:id", "Update an existing post")
   .auth()
   .exists("id", posts)
   .json(UpdatePost)
@@ -154,7 +156,7 @@ define.patch("/api/posts/:id", "Update an existing post")
     });
   });
 
-define.delete("/api/posts/:id", "Delete a post")
+r.delete("/:id", "Delete a post")
   .auth()
   .exists("id", posts)
   .tag("Posts")

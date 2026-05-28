@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { users } from "../db/schema.js";
-import { define } from "../lib/scalar-docs.js";
-import { signJwt } from "../lib/jwt.js";
-import { getGoogleAuthUrl, exchangeCodeForTokens, getUserProfile } from "../lib/oauth.js";
-import { CodeParam } from "../validators/schemas.js";
+import { db } from "@/db/index";
+import { users } from "@/db/schema";
+import { define } from "@/lib/scalar-docs";
+import { signJwt } from "@/lib/jwt";
+import { getGoogleAuthUrl, exchangeCodeForTokens, getUserProfile } from "@/lib/oauth";
+import { CodeParam } from "./schema.js";
 
-define.get("/api/auth/google/url", "Get Google OAuth URL")
+const r = define.in("/api/auth");
+
+r.get("/google/url", "Get Google OAuth URL")
   .tag("Auth")
   .response(200, "Google OAuth URL")
   .handle(async (c) => {
@@ -18,7 +20,7 @@ define.get("/api/auth/google/url", "Get Google OAuth URL")
     }
   });
 
-define.get("/api/auth/google/callback", "Handle Google OAuth callback")
+r.get("/google/callback", "Handle Google OAuth callback")
   .query(CodeParam)
   .tag("Auth")
   .response(200, "JWT token and user profile")
@@ -65,7 +67,7 @@ define.get("/api/auth/google/callback", "Handle Google OAuth callback")
     });
   });
 
-define.get("/api/auth/me", "Get current user profile")
+r.get("/me", "Get current user profile")
   .auth()
   .tag("Auth")
   .response(200, "User profile")

@@ -1,5 +1,5 @@
-import { db } from "./db/index.js";
-import { users, posts, tags, postsTags, postLikes, comments } from "./db/schema.js";
+import { db } from "@/db/index";
+import { users, posts, tags, postsTags, postLikes, comments } from "@/db/schema";
 
 await db.delete(postLikes);
 await db.delete(postsTags);

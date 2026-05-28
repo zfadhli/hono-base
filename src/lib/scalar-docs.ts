@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { sValidator as stdValidator } from "@hono/standard-validator";
 import { apiReference } from "@scalar/hono-api-reference";
 import { eq } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { auth } from "../middleware/auth.js";
+import { db } from "@/db/index";
+import { auth } from "@/middleware/auth";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Context } from "hono";
 
@@ -338,6 +338,15 @@ export const define = {
   },
   delete(path: string, description?: string) {
     return createBuilder("DELETE", path, description);
+  },
+
+  in(prefix: string) {
+    return {
+      get: (path = "", description?: string) => createBuilder("GET", prefix + path, description),
+      post: (path = "", description?: string) => createBuilder("POST", prefix + path, description),
+      patch: (path = "", description?: string) => createBuilder("PATCH", prefix + path, description),
+      delete: (path = "", description?: string) => createBuilder("DELETE", prefix + path, description),
+    };
   },
 
   mount(app: Hono, opts: MountOptions = {}) {
