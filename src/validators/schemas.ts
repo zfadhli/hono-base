@@ -37,8 +37,6 @@ export const CreateTag = type({
 export type CreateTag = typeof CreateTag.infer;
 
 export const CreateComment = type({
-  authorName: "string >= 1",
-  "authorEmail?": "string",
   content: "string >= 1",
 });
 export type CreateComment = typeof CreateComment.infer;
@@ -51,3 +49,6 @@ export const Pagination = type({
   "limit?": "string",
 });
 export type Pagination = typeof Pagination.infer;
+
+export const CodeParam = type({ code: "string" });
+export type CodeParam = typeof CodeParam.infer;

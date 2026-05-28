@@ -3,6 +3,7 @@ import { sValidator as stdValidator } from "@hono/standard-validator";
 import { apiReference } from "@scalar/hono-api-reference";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
+import { auth } from "../middleware/auth.js";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Context } from "hono";
 
@@ -20,6 +21,7 @@ interface RouteDef {
   json?: StandardSchemaV1;
   responses: { status: number; description: string }[];
   middleware: unknown[];
+  requiresAuth: boolean;
   handler: (c: Context) => Response | Promise<Response>;
 }
 
@@ -43,6 +45,7 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     this.def.tags = [];
     this.def.responses = [];
     this.def.middleware = [];
+    this.def.requiresAuth = false;
   }
 
   param<S extends StandardSchemaV1>(schema: S): RouteBuilder<T & { param: InferOutput<S> }> {
@@ -79,6 +82,12 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
       await next();
     });
 
+    return this;
+  }
+
+  auth(): this {
+    this.def.requiresAuth = true;
+    this.pre.push(auth);
     return this;
   }
 
@@ -282,6 +291,7 @@ function generateSpec(routes: RouteDef[], opts: MountOptions): Record<string, un
       tags: route.tags,
       parameters: opParams.length > 0 ? opParams : undefined,
       responses,
+      security: route.requiresAuth ? [{ bearerAuth: [] }] : undefined,
     };
 
     if (route.json) {
@@ -298,6 +308,15 @@ function generateSpec(routes: RouteDef[], opts: MountOptions): Record<string, un
     openapi: "3.1.0",
     info: { title: opts.title ?? "API", version: opts.version ?? "1.0.0" },
     paths,
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
   };
 }
 

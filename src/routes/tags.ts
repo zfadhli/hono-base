@@ -13,9 +13,11 @@ define.get("/api/tags", "List all tags")
   });
 
 define.post("/api/tags", "Create a new tag")
+  .auth()
   .json(CreateTag)
   .tag("Tags")
   .response(201, "Created tag")
+  .response(401, "Unauthorized")
   .handle(async (c, { json }) => {
     const [tag] = await db.insert(tags).values(json).returning();
     if (!tag) return c.json({ error: "Failed to create" }, 500);
@@ -23,9 +25,11 @@ define.post("/api/tags", "Create a new tag")
   });
 
 define.delete("/api/tags/:id", "Delete a tag")
+  .auth()
   .exists("id", tags)
   .tag("Tags")
   .response(200, "Deleted tag")
+  .response(401, "Unauthorized")
   .handle(async (c) => {
     const id = (c.get as (k: string) => { id: number })("id").id;
     await db.delete(tags).where(eq(tags.id, id));

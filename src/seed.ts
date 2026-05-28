@@ -1,16 +1,17 @@
 import { db } from "./db/index.js";
-import { users, posts, tags, postsTags, postLikes } from "./db/schema.js";
+import { users, posts, tags, postsTags, postLikes, comments } from "./db/schema.js";
 
 await db.delete(postLikes);
 await db.delete(postsTags);
+await db.delete(comments);
 await db.delete(posts);
 await db.delete(tags);
 await db.delete(users);
 
 const insertedUsers = await db.insert(users).values([
-  { name: "Alice Johnson", email: "alice@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=alice" },
-  { name: "Bob Smith", email: "bob@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=bob" },
-  { name: "Carol Davis", email: "carol@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=carol" },
+  { name: "Alice Johnson", email: "alice@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=alice", googleId: "seed-alice" },
+  { name: "Bob Smith", email: "bob@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=bob", googleId: "seed-bob" },
+  { name: "Carol Davis", email: "carol@example.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=carol", googleId: "seed-carol" },
 ]).returning();
 
 const insertedTags = await db.insert(tags).values([
@@ -87,5 +88,15 @@ if (likeLinks.length > 0) {
   await db.insert(postLikes).values(likeLinks);
 }
 
-console.log(`Seeded: ${insertedUsers.length} users, ${insertedTags.length} tags, ${insertedPosts.length} posts, ${postTagLinks.length} tag links, ${likeLinks.length} likes`);
+const commentData = insertedPosts.slice(0, 5).flatMap((post, i) => {
+  const user = insertedUsers[i % insertedUsers.length]!;
+  return [
+    { postId: post.id, userId: user.id, authorName: user.name, authorEmail: user.email, content: `Great post about ${post.title}!` },
+    { postId: post.id, userId: insertedUsers[(i + 1) % insertedUsers.length]!.id, authorName: insertedUsers[(i + 1) % insertedUsers.length]!.name, authorEmail: insertedUsers[(i + 1) % insertedUsers.length]!.email, content: `Thanks for sharing this.` },
+  ];
+});
+
+await db.insert(comments).values(commentData);
+
+console.log(`Seeded: ${insertedUsers.length} users, ${insertedTags.length} tags, ${insertedPosts.length} posts, ${postTagLinks.length} tag links, ${commentData.length} comments, ${likeLinks.length} likes`);
 process.exit(0);

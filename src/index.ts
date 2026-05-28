@@ -6,6 +6,7 @@ import "./routes/posts.js";
 import "./routes/tags.js";
 import "./routes/comments.js";
 import "./routes/likes.js";
+import "./routes/auth.js";
 
 const app = new Hono();
 

@@ -20,18 +20,22 @@ define.get("/api/posts/:postId/comments", "List comments for a post")
   });
 
 define.post("/api/posts/:postId/comments", "Create a comment on a post")
+  .auth()
   .param(PostIdParam)
   .exists("postId", posts)
   .json(CreateComment)
   .tag("Comments")
   .response(201, "Created comment")
+  .response(401, "Unauthorized")
   .handle(async (c, { param, json }) => {
+    const user = (c.get as (k: string) => { id: number; name: string; email: string })("user");
     const { postId } = param;
 
     const [comment] = await db.insert(comments).values({
       postId,
-      authorName: json.authorName,
-      authorEmail: json.authorEmail,
+      userId: user.id,
+      authorName: user.name,
+      authorEmail: user.email,
       content: json.content,
     }).returning();
 
@@ -39,12 +43,17 @@ define.post("/api/posts/:postId/comments", "Create a comment on a post")
   });
 
 define.delete("/api/posts/:postId/comments/:id", "Delete a comment")
+  .auth()
   .tag("Comments")
   .response(200, "Deleted comment")
+  .response(401, "Unauthorized")
   .response(404, "Comment not found")
   .handle(async (c) => {
+    const user = (c.get as (k: string) => { id: number })("user");
     const id = Number(c.req.param("id")!);
-    const [comment] = await db.delete(comments).where(eq(comments.id, id)).returning({ id: comments.id });
-    if (!comment) return c.json({ error: "Not found" }, 404);
+    const [existing] = await db.select({ id: comments.id, userId: comments.userId }).from(comments).where(eq(comments.id, id));
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    if (existing.userId !== user.id) return c.json({ error: "Forbidden" }, 403);
+    await db.delete(comments).where(eq(comments.id, id));
     return c.json({ success: true });
   });

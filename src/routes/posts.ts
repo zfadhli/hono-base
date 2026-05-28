@@ -71,13 +71,16 @@ define.get("/api/posts/:slug", "Get a single post by slug")
   });
 
 define.post("/api/posts", "Create a new post")
+  .auth()
   .json(CreatePost)
   .tag("Posts")
   .response(201, "Created post")
+  .response(401, "Unauthorized")
   .handle(async (c, { json }) => {
+    const user = (c.get as (k: string) => { id: number })("user");
     const { tagIds, ...postFields } = json;
 
-    const [post] = await db.insert(posts).values(postFields).returning();
+    const [post] = await db.insert(posts).values({ ...postFields, authorId: user.id }).returning();
     if (!post) return c.json({ error: "Failed to create" }, 500);
 
     if (tagIds && tagIds.length > 0) {
@@ -92,22 +95,28 @@ define.post("/api/posts", "Create a new post")
   });
 
 define.patch("/api/posts/:id", "Update an existing post")
+  .auth()
   .exists("id", posts)
   .json(UpdatePost)
   .tag("Posts")
   .response(200, "Updated post")
+  .response(401, "Unauthorized")
+  .response(403, "Forbidden")
   .response(404, "Post not found")
   .handle(async (c, { json }) => {
-    const id = (c.get as (k: string) => { id: number })("id").id;
+    const existingPost = (c.get as (k: string) => { id: number; authorId: number })("id");
+    const user = (c.get as (k: string) => { id: number })("user");
+    if (existingPost.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
+    const id = existingPost.id;
     const { tagIds, ...postFields } = json;
 
     if (Object.keys(postFields).length > 0) {
-      const [post] = await db
+      const [updatedPost] = await db
         .update(posts)
         .set({ ...postFields, updatedAt: sql`(current_timestamp)` })
         .where(eq(posts.id, id))
         .returning();
-      if (!post) return c.json({ error: "Not found" }, 404);
+      if (!updatedPost) return c.json({ error: "Not found" }, 404);
     }
 
     if (tagIds !== undefined) {
@@ -146,11 +155,17 @@ define.patch("/api/posts/:id", "Update an existing post")
   });
 
 define.delete("/api/posts/:id", "Delete a post")
+  .auth()
   .exists("id", posts)
   .tag("Posts")
   .response(200, "Deleted post")
+  .response(401, "Unauthorized")
+  .response(403, "Forbidden")
+  .response(404, "Post not found")
   .handle(async (c) => {
-    const id = (c.get as (k: string) => { id: number })("id").id;
-    await db.delete(posts).where(eq(posts.id, id));
+    const existingPost = (c.get as (k: string) => { id: number; authorId: number })("id");
+    const user = (c.get as (k: string) => { id: number })("user");
+    if (existingPost.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
+    await db.delete(posts).where(eq(posts.id, existingPost.id));
     return c.json({ success: true });
   });

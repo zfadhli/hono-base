@@ -25,6 +25,7 @@
     "@scalar/hono-api-reference": "^0.10.19",
     "arktype": "^2.2.0",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.23"
+    "hono": "^4.12.23",
+    "jose": "^6.2.3"
   }
 }

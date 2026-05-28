@@ -2,7 +2,7 @@ import { eq, and, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { postLikes, posts, users } from "../db/schema.js";
 import { define } from "../lib/scalar-docs.js";
-import { PostIdParam, ToggleLike } from "../validators/schemas.js";
+import { PostIdParam } from "../validators/schemas.js";
 
 define.get("/api/posts/:postId/likes", "Get likes for a post")
   .param(PostIdParam)
@@ -25,27 +25,25 @@ define.get("/api/posts/:postId/likes", "Get likes for a post")
   });
 
 define.post("/api/posts/:postId/likes", "Toggle like on a post")
+  .auth()
   .param(PostIdParam)
   .exists("postId", posts)
-  .json(ToggleLike)
   .tag("Likes")
   .response(200, "Toggled like status")
-  .handle(async (c, { param, json }) => {
+  .response(401, "Unauthorized")
+  .handle(async (c, { param }) => {
+    const user = (c.get as (k: string) => { id: number })("user");
     const { postId } = param;
-    const { userId } = json;
-
-    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
-    if (!user) return c.json({ error: "User not found" }, 404);
 
     const [existing] = await db
       .select({ id: postLikes.id })
       .from(postLikes)
-      .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
+      .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, user.id)));
 
     if (existing) {
       await db.delete(postLikes).where(eq(postLikes.id, existing.id));
     } else {
-      await db.insert(postLikes).values({ postId, userId });
+      await db.insert(postLikes).values({ postId, userId: user.id });
     }
 
     const [totalRow] = await db.select({ count: count() }).from(postLikes).where(eq(postLikes.postId, postId));

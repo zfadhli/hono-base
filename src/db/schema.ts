@@ -6,6 +6,7 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   avatar: text("avatar"),
+  googleId: text("google_id").unique(),
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
 });
 
@@ -48,6 +49,7 @@ export const comments = sqliteTable("comments", {
   postId: integer("post_id")
     .notNull()
     .references(() => posts.id, { onDelete: "cascade" }),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   authorName: text("author_name").notNull(),
   authorEmail: text("author_email"),
   content: text("content").notNull(),
@@ -99,4 +101,5 @@ export const postLikesRelations = relations(postLikes, ({ one }) => ({
 
 export const commentsRelations = relations(comments, ({ one }) => ({
   post: one(posts, { fields: [comments.postId], references: [posts.id] }),
+  author: one(users, { fields: [comments.userId], references: [users.id] }),
 }));
