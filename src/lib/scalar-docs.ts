@@ -22,7 +22,7 @@ interface RouteDef {
   param?: StandardSchemaV1;
   query?: StandardSchemaV1;
   json?: StandardSchemaV1;
-  responses: { status: number; description: string }[];
+  responses: { status: number; description: string; schema?: StandardSchemaV1 }[];
   middleware: unknown[];
   requiresAuth: boolean;
   handler: (c: Context) => Response | Promise<Response>;
@@ -104,8 +104,8 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this as unknown as RouteBuilder<T & { user: AuthUser }>;
   }
 
-  response(status: number, description: string): this {
-    this.def.responses!.push({ status, description });
+  response(status: number, description: string, schema?: StandardSchemaV1): this {
+    this.def.responses!.push({ status, description, schema });
     return this;
   }
 
@@ -385,7 +385,7 @@ function generateSpec(routes: RouteDef[], opts: MountOptions): Record<string, un
     for (const resp of route.responses) {
       responses[String(resp.status)] = {
         description: resp.description,
-        content: { "application/json": { schema: { type: "object" } } },
+        content: { "application/json": { schema: resp.schema ? toJsonSchema(getArkJson(resp.schema)) : { type: "object" } } },
       };
     }
 

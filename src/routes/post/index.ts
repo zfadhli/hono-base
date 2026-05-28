@@ -2,7 +2,8 @@ import { eq, sql, like, or } from "drizzle-orm";
 import { db } from "@/db/index";
 import { posts, postsTags, tags } from "@/db/schema";
 import { define, pagination } from "@/lib/scalar-docs";
-import { CreatePost, UpdatePost, PostQuery } from "./schema.js";
+import { ErrorRes, SuccessRes } from "@/validators/common";
+import { CreatePost, UpdatePost, PostQuery, PaginatedPosts, PostRes } from "./schema.js";
 
 function formatPost(row: any) {
   return {
@@ -25,7 +26,7 @@ const r = define.in("/api/posts");
 r.get("", "List paginated posts")
   .query(PostQuery)
   .tag("Posts")
-  .response(200, "Paginated list of posts")
+  .response(200, "Paginated list of posts", PaginatedPosts)
   .handle(async (c, { query }) => {
     const result = await pagination(query)
       .from(db.query.posts, posts)
@@ -44,8 +45,8 @@ r.get("", "List paginated posts")
 
 r.get("/:slug", "Get a single post by slug")
   .tag("Posts")
-  .response(200, "A single post with tags")
-  .response(404, "Post not found")
+  .response(200, "A single post with tags", PostRes)
+  .response(404, "Post not found", ErrorRes)
   .handle(async (c) => {
     const slug = c.req.param("slug")!;
 
@@ -63,8 +64,8 @@ r.post("", "Create a new post")
   .auth()
   .json(CreatePost)
   .tag("Posts")
-  .response(201, "Created post")
-  .response(401, "Unauthorized")
+  .response(201, "Created post", PostRes)
+  .response(401, "Unauthorized", ErrorRes)
   .handle(async (c, { json, user }) => {
     const { tagIds, ...postFields } = json;
 
@@ -87,10 +88,10 @@ r.patch("/:id", "Update an existing post")
   .exists("id", posts, { owner: "authorId" })
   .json(UpdatePost)
   .tag("Posts")
-  .response(200, "Updated post")
-  .response(401, "Unauthorized")
-  .response(403, "Forbidden")
-  .response(404, "Post not found")
+  .response(200, "Updated post", PostRes)
+  .response(401, "Unauthorized", ErrorRes)
+  .response(403, "Forbidden", ErrorRes)
+  .response(404, "Post not found", ErrorRes)
   .handle(async (c, { json, id }) => {
     const { tagIds, ...postFields } = json;
 
@@ -126,10 +127,10 @@ r.delete("/:id", "Delete a post")
   .auth()
   .exists("id", posts, { owner: "authorId" })
   .tag("Posts")
-  .response(200, "Deleted post")
-  .response(401, "Unauthorized")
-  .response(403, "Forbidden")
-  .response(404, "Post not found")
+  .response(200, "Deleted post", SuccessRes)
+  .response(401, "Unauthorized", ErrorRes)
+  .response(403, "Forbidden", ErrorRes)
+  .response(404, "Post not found", ErrorRes)
   .handle(async (c, { id }) => {
     await db.delete(posts).where(eq(posts.id, id.id));
     return c.json({ success: true });

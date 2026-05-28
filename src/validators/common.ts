@@ -8,3 +8,6 @@ export const NumId = type("string").pipe((s, ctx) => {
 export type NumId = typeof NumId.infer;
 
 export const PostIdParam = type({ postId: NumId });
+
+export const ErrorRes = type({ error: "string" });
+export const SuccessRes = type({ success: "true" });

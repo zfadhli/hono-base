@@ -1,8 +1,9 @@
+import { type } from "arktype";
 import { eq, and, count } from "drizzle-orm";
 import { db } from "@/db/index";
 import { postLikes, posts, users } from "@/db/schema";
 import { define } from "@/lib/scalar-docs";
-import { PostIdParam } from "@/validators/common";
+import { PostIdParam, ErrorRes } from "@/validators/common";
 
 const r = define.in("/api/posts/:postId/likes");
 
@@ -10,7 +11,7 @@ r.get("", "Get likes for a post")
   .param(PostIdParam)
   .exists("postId", posts)
   .tag("Likes")
-  .response(200, "Like count and list of users")
+  .response(200, "Like count and list of users", type({ count: "number", users: type({ id: "number", name: "string" }).array() }))
   .handle(async (c, { param }) => {
     const { postId } = param;
 
@@ -31,8 +32,8 @@ r.post("", "Toggle like on a post")
   .param(PostIdParam)
   .exists("postId", posts)
   .tag("Likes")
-  .response(200, "Toggled like status")
-  .response(401, "Unauthorized")
+  .response(200, "Toggled like status", type({ liked: "boolean", likeCount: "number" }))
+  .response(401, "Unauthorized", ErrorRes)
   .handle(async (c, { param, user }) => {
     const { postId } = param;
 

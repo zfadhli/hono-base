@@ -2,8 +2,8 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "@/db/index";
 import { comments, posts } from "@/db/schema";
 import { define, pagination } from "@/lib/scalar-docs";
-import { PostIdParam } from "@/validators/common";
-import { CreateComment, CommentQuery } from "./schema.js";
+import { PostIdParam, ErrorRes, SuccessRes } from "@/validators/common";
+import { CreateComment, CommentQuery, PaginatedComments, CommentRes } from "./schema.js";
 
 const r = define.in("/api/posts/:postId/comments");
 
@@ -12,7 +12,7 @@ r.get("", "List paginated comments for a post")
   .exists("postId", posts)
   .query(CommentQuery)
   .tag("Comments")
-  .response(200, "Paginated list of comments")
+  .response(200, "Paginated list of comments", PaginatedComments)
   .handle(async (c, { query }) => {
     const postId = Number(c.req.param("postId")!);
     const result = await pagination(query)
@@ -30,8 +30,8 @@ r.post("", "Create a comment on a post")
   .exists("postId", posts)
   .json(CreateComment)
   .tag("Comments")
-  .response(201, "Created comment")
-  .response(401, "Unauthorized")
+  .response(201, "Created comment", CommentRes)
+  .response(401, "Unauthorized", ErrorRes)
   .handle(async (c, { param, json, user }) => {
     const { postId } = param;
 
@@ -50,10 +50,10 @@ r.delete("/:id", "Delete a comment")
   .auth()
   .exists("id", comments, { owner: "userId" })
   .tag("Comments")
-  .response(200, "Deleted comment")
-  .response(401, "Unauthorized")
-  .response(403, "Forbidden")
-  .response(404, "Comment not found")
+  .response(200, "Deleted comment", SuccessRes)
+  .response(401, "Unauthorized", ErrorRes)
+  .response(403, "Forbidden", ErrorRes)
+  .response(404, "Comment not found", ErrorRes)
   .handle(async (c, { id }) => {
     await db.delete(comments).where(eq(comments.id, id.id));
     return c.json({ success: true });

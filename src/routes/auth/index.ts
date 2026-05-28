@@ -1,3 +1,4 @@
+import { type } from "arktype";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/index";
 import { users } from "@/db/schema";
@@ -5,13 +6,14 @@ import { define } from "@/lib/scalar-docs";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "@/lib/jwt";
 import { getGoogleAuthUrl, exchangeCodeForTokens, getUserProfile } from "@/lib/oauth";
 import { getCookie, setCookie } from "hono/cookie";
+import { ErrorRes, SuccessRes } from "@/validators/common";
 import { CodeParam } from "./schema.js";
 
 const r = define.in("/api/auth");
 
 r.get("/google/url", "Get Google OAuth URL")
   .tag("Auth")
-  .response(200, "Google OAuth URL")
+  .response(200, "Google OAuth URL", type({ url: "string" }))
   .handle(async (c) => {
     try {
       const url = getGoogleAuthUrl();
@@ -24,9 +26,9 @@ r.get("/google/url", "Get Google OAuth URL")
 r.get("/google/callback", "Handle Google OAuth callback")
   .query(CodeParam)
   .tag("Auth")
-  .response(200, "Access token and user profile")
-  .response(400, "Missing code or token exchange failed")
-  .response(500, "Failed to create user")
+  .response(200, "Access token and user profile", type({ accessToken: "string", user: type({ id: "number", name: "string", email: "string", avatar: "string | null" }) }))
+  .response(400, "Missing code or token exchange failed", ErrorRes)
+  .response(500, "Failed to create user", ErrorRes)
   .handle(async (c, { query }) => {
     const { code } = query;
 
@@ -79,8 +81,8 @@ r.get("/google/callback", "Handle Google OAuth callback")
 
 r.post("/refresh", "Refresh access token")
   .tag("Auth")
-  .response(200, "New access token")
-  .response(401, "Invalid or expired refresh token")
+  .response(200, "New access token and user profile", type({ accessToken: "string", user: type({ id: "number", name: "string", email: "string", avatar: "string | null" }) }))
+  .response(401, "Invalid or expired refresh token", ErrorRes)
   .handle(async (c) => {
     const refreshToken = getCookie(c, "refreshToken");
     if (!refreshToken) return c.json({ error: "No refresh token" }, 401);
@@ -114,7 +116,7 @@ r.post("/refresh", "Refresh access token")
 
 r.post("/logout", "Log out and clear refresh token")
   .tag("Auth")
-  .response(200, "Logged out")
+  .response(200, "Logged out", SuccessRes)
   .handle(async (c) => {
     setCookie(c, "refreshToken", "", {
       httpOnly: true,
@@ -129,8 +131,8 @@ r.post("/logout", "Log out and clear refresh token")
 r.get("/me", "Get current user profile")
   .auth()
   .tag("Auth")
-  .response(200, "User profile")
-  .response(401, "Unauthorized")
+  .response(200, "User profile", type({ user: type({ id: "number", name: "string", email: "string", avatar: "string | null" }) }))
+  .response(401, "Unauthorized", ErrorRes)
   .handle(async (c, { user }) => {
     return c.json({ user });
   });

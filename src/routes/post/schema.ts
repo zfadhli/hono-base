@@ -31,3 +31,28 @@ export const PostQuery = type({
   "order?": "'asc' | 'desc'",
 });
 export type PostQuery = typeof PostQuery.infer;
+
+const TagInPost = type({ id: "number", name: "string", slug: "string" });
+
+export const Post = type({
+  id: "number",
+  title: "string",
+  slug: "string",
+  content: "string",
+  "excerpt?": "string",
+  published: "boolean",
+  authorId: "number",
+  createdAt: "string",
+  updatedAt: "string",
+  tags: TagInPost.array(),
+  likeCount: "number",
+});
+
+export const PaginatedPosts = type({
+  data: Post.array(),
+  total: "number",
+  offset: "number",
+  limit: "number",
+});
+
+export const PostRes = type({ data: Post });
