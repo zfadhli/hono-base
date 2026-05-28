@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator as stdValidator } from "@hono/standard-validator";
+import { validate } from "@/lib/validator";
 import { apiReference } from "@scalar/hono-api-reference";
 import { eq, and, count, asc, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -126,9 +126,9 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     };
 
     const chain: unknown[] = [...this.pre];
-    if (this.def.param) chain.push(stdValidator("param", this.def.param));
-    if (this.def.query) chain.push(stdValidator("query", this.def.query));
-    if (this.def.json) chain.push(stdValidator("json", this.def.json));
+    if (this.def.param) chain.push(validate("param", this.def.param));
+    if (this.def.query) chain.push(validate("query", this.def.query));
+    if (this.def.json) chain.push(validate("json", this.def.json));
     chain.push(this.def.handler);
     this.def.middleware = chain;
 
