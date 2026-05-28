@@ -1,4 +1,4 @@
-import { eq, sql, like, or } from "drizzle-orm";
+import { eq, sql, like, or, exists, and } from "drizzle-orm";
 import { db } from "@/db/index";
 import { posts, postsTags, tags } from "@/db/schema";
 import { define, pagination } from "@/lib/scalar-docs";
@@ -32,7 +32,15 @@ r.get("", "List paginated posts")
       .from(db.query.posts, posts)
       .filters({
         q: (v) => or(like(posts.title, `%${v}%`), like(posts.content, `%${v}%`)),
-        tag: (v) => sql`exists (select 1 from ${postsTags} pt join ${tags} t on pt.tag_id = t.id where pt.post_id = ${posts.id} and t.slug = ${v})`,
+        tag: (v) => exists(
+          db.select({ one: sql`1` })
+            .from(postsTags)
+            .innerJoin(tags, eq(postsTags.tagId, tags.id))
+            .where(and(
+              eq(postsTags.postId, posts.id),
+              eq(tags.slug, v),
+            ))
+        ),
         authorId: (v) => eq(posts.authorId, Number(v)),
         published: (v) => eq(posts.published, v === "true"),
       })
