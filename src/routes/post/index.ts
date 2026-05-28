@@ -1,54 +1,20 @@
-import { eq, sql, like, or, exists, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/index";
 import { posts, postsTags, tags } from "@/db/schema";
-import { define, pagination } from "@/lib/scalar-docs";
+import { define } from "@/lib/scalar-docs";
 import { ErrorRes, SuccessRes } from "@/validators/common";
-import { CreatePost, UpdatePost, PostQuery, PaginatedPosts, PostRes } from "./schema.js";
-
-function formatPost(row: any) {
-  return {
-    id: row.id,
-    title: row.title,
-    slug: row.slug,
-    content: row.content,
-    excerpt: row.excerpt,
-    published: row.published,
-    authorId: row.authorId,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    tags: row.postsTags.map((pt: any) => pt.tag),
-    likeCount: row.postLikes.length,
-  };
-}
+import { CreatePost, UpdatePost, PaginatedPosts, PostRes } from "./schema.js";
+import { postQueryBuilder, formatPost } from "./query.js";
 
 const r = define.in("/api/posts");
 
 r.get("", "List paginated posts")
-  .query(PostQuery)
+  .use(postQueryBuilder)
   .tag("Posts")
   .response(200, "Paginated list of posts", PaginatedPosts)
   .handle(async (c, { query }) => {
-    const result = await pagination(query)
-      .from(db.query.posts, posts)
-      .filters({
-        q: (v) => or(like(posts.title, `%${v}%`), like(posts.content, `%${v}%`)),
-        tag: (v) => exists(
-          db.select({ one: sql`1` })
-            .from(postsTags)
-            .innerJoin(tags, eq(postsTags.tagId, tags.id))
-            .where(and(
-              eq(postsTags.postId, posts.id),
-              eq(tags.slug, v),
-            ))
-        ),
-        authorId: (v) => eq(posts.authorId, Number(v)),
-        published: (v) => eq(posts.published, v === "true"),
-      })
-      .sortable({ createdAt: posts.createdAt, title: posts.title })
-      .with({ postsTags: { with: { tag: true } }, postLikes: true })
-      .execute();
-
-    return c.json({ data: result.data.map(formatPost), total: result.total, offset: result.offset, limit: result.limit });
+    const result = await postQueryBuilder.execute(db.query.posts, posts, query);
+    return c.json(result);
   });
 
 r.get("/:slug", "Get a single post by slug")

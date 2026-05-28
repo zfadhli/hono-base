@@ -5,19 +5,9 @@ import { eq, and, count, asc, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "@/db/index";
 import { auth } from "@/middleware/auth";
+import { ClientError } from "@/lib/errors";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Context } from "hono";
-
-// ─── Client Error ────────────────────────────────────────────────────────────
-
-class ClientError extends Error {
-  status: number;
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-    this.name = "ClientError";
-  }
-}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -79,11 +69,6 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     return this as unknown as RouteBuilder<T & { json: InferOutput<S> }>;
   }
 
-  use(mw: unknown): this {
-    this.pre.push(mw);
-    return this;
-  }
-
   exists(paramName: string, table: any, options?: { key?: string; owner?: string }): RouteBuilder<T & Record<string, any>> {
     const key = options?.key ?? "id";
     const ownerColumn = options?.owner;
@@ -113,6 +98,11 @@ class RouteBuilder<T extends Record<string, unknown> = {}> {
     this.hasAuth = true;
     this.pre.push(auth);
     return this as unknown as RouteBuilder<T & { user: AuthUser }>;
+  }
+
+  use(builder: { getQuerySchema(): StandardSchemaV1 }): RouteBuilder<T & { query: Record<string, string | undefined> }> {
+    this.def.query = builder.getQuerySchema();
+    return this as unknown as RouteBuilder<T & { query: Record<string, string | undefined> }>;
   }
 
   response(status: number, description: string, schema?: StandardSchemaV1): this {

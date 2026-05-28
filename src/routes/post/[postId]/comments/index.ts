@@ -1,25 +1,25 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db/index";
 import { comments, posts } from "@/db/schema";
-import { define, pagination } from "@/lib/scalar-docs";
+import { define } from "@/lib/scalar-docs";
 import { PostIdParam, ErrorRes, SuccessRes } from "@/validators/common";
-import { CreateComment, CommentQuery, PaginatedComments, CommentRes } from "./schema.js";
+import { CreateComment, PaginatedComments, CommentRes } from "./schema.js";
+import { commentsQueryBuilder } from "./query.js";
 
 const r = define.in("/api/posts/:postId/comments");
 
 r.get("", "List paginated comments for a post")
   .param(PostIdParam)
   .exists("postId", posts)
-  .query(CommentQuery)
+  .use(commentsQueryBuilder)
   .tag("Comments")
   .response(200, "Paginated list of comments", PaginatedComments)
   .handle(async (c, { query }) => {
     const postId = Number(c.req.param("postId")!);
-    const result = await pagination(query)
-      .from(db.query.comments, comments)
-      .where(eq(comments.postId, postId))
-      .orderBy([desc(comments.createdAt)])
-      .execute();
+    const result = await commentsQueryBuilder.execute(db.query.comments, comments, query, {
+      where: eq(comments.postId, postId),
+      orderBy: [desc(comments.createdAt)],
+    });
 
     return c.json(result);
   });
